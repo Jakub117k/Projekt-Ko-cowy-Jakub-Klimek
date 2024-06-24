@@ -1,0 +1,1001 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.model_selection import cross_val_score
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+dane = pd.read_csv('GlobalTemperatures.csv')
+dane_kraje = pd.read_csv('GlobalLandTemperaturesByCountry.csv')
+dane_miasta = pd.read_csv('GlobalLandTemperaturesByCity.csv')
+
+# pozbycie się niepotrzebnych kolumn
+dane = dane.drop(columns=['LandMaxTemperature', 'LandMaxTemperatureUncertainty', 'LandMinTemperature', 'LandMinTemperatureUncertainty', 'LandAndOceanAverageTemperatureUncertainty', 'LandAverageTemperature', 'LandAverageTemperatureUncertainty'  ])
+dane_kraje = dane_kraje.drop(columns=['AverageTemperatureUncertainty'])
+dane_miasta = dane_miasta.drop(columns=['AverageTemperatureUncertainty'])
+# zmiana nazw kolumn
+
+dane = dane.rename(columns={
+    'dt': 'Miesiac',
+    'LandAndOceanAverageTemperature': 'Temperatura_srednia'})
+
+dane_kraje = dane_kraje.rename(columns={
+    'dt': 'Miesiac',
+    'AverageTemperature': 'Temperatura_srednia',
+    'Country': 'Kraj'})
+
+dane_miasta = dane_miasta.rename(columns={
+    'dt': 'Miesiac',
+    'AverageTemperature': 'Temperatura_srednia',
+    'City': 'Miasto',
+    'Country': 'Kraj'
+})
+# print(dane_miasta.columns)
+# zmiana kolumny na datetime oraz filtr wedlug zakresu dat
+
+dane['Miesiac'] = pd.to_datetime(dane['Miesiac'])
+start = '1900-01-01'
+end = '2012-12-01'
+
+dane = dane[(dane['Miesiac'] >= start) & (dane['Miesiac'] <= end) ]
+
+dane_kraje['Miesiac'] = pd.to_datetime(dane_kraje['Miesiac'])
+start = '1900-01-01'
+end = '2012-12-01'
+
+dane_kraje = dane_kraje[(dane_kraje['Miesiac'] >= start) & (dane_kraje['Miesiac'] <= end) ]
+
+dane_miasta['Miesiac'] = pd.to_datetime(dane_miasta['Miesiac'])
+start = '1900-01-01'
+end = '2012-12-01'
+
+dane_miasta = dane_miasta[(dane_miasta['Miesiac'] >= start) & (dane_miasta['Miesiac'] <= end) ]
+
+# Usunięcie wartości brakujących
+dane.dropna()
+dane_kraje.dropna()
+dane.dropna(subset=['Temperatura_srednia'], inplace=True)
+dane_kraje.dropna(subset=['Temperatura_srednia'], inplace=True)
+dane_miasta.dropna(subset=['Temperatura_srednia'], inplace=True)
+
+# nan_temperatura1 = dane[dane['Temperatura_srednia'].isna()]
+# print(nan_temperatura1)
+# nan_temperatura2 = dane_kraje[dane_kraje['Temperatura_srednia'].isna()]
+# print(nan_temperatura2)
+# nan_temperatura3 = dane_miasta[dane_miasta['Temperatura_srednia'].isna()]
+# print(nan_temperatura3)
+# Zamiana temperatur nan na srednie
+
+dane.dropna(subset=['Temperatura_srednia'], inplace=True)
+dane_kraje.dropna(subset=['Temperatura_srednia'], inplace=True)
+
+# oczyszczenie danych z informacji o regionach- błędy
+dane_kraje = dane_kraje[~dane_kraje['Kraj'].str.contains('Europe|North America')]
+
+
+# Dodanie kolumn 'Rok' oraz 'Dekada'
+
+dane['Rok'] = dane['Miesiac'].dt.year
+dane_kraje['Rok'] = dane_kraje['Miesiac'].dt.year
+dane_miasta['Rok'] = dane_miasta['Miesiac'].dt.year
+
+dane['Dekada'] = (dane['Rok'] // 10) * 10
+dane = dane[dane['Dekada'] != 2010]
+
+dane_kraje['Dekada'] = (dane_kraje['Rok'] // 10) * 10
+dane_kraje = dane_kraje[dane_kraje['Dekada'] != 2010]
+
+# dane_miasta['Dekada'] = (dane_miasta['Rok'] // 10) * 10
+# dane_miasta = dane_miasta[dane_miasta['Dekada'] != 2010]
+
+# Stworzenie zbiorów dla Polski i Pakistanu
+dane_polska = dane_kraje[dane_kraje['Kraj'] == 'Poland']
+dane_pakistan = dane_kraje[dane_kraje['Kraj'] == 'Pakistan']
+
+dane_kraje = dane_kraje.dropna(subset=['Kraj'])
+
+dane_kraje = dane_kraje[~dane_kraje['Kraj'].str.contains('Europe|North America')]
+
+# Wykresy sprawdzające brak dużych odchyłek danych
+# sns.pairplot(dane)
+# plt.show()
+
+# sns.pairplot(dane_polska)
+# plt.show()
+
+# sns.pairplot(dane_pakistan)
+# plt.show()
+
+# sns.pairplot (dane_miasta)
+# plt.show()
+
+# Najcieplejszy i najzimniejszy kraj i miasto przez cały ten czas
+
+# Obliczenie średniej temperatury dla każdego kraju i miasta w latach 1900-2012
+srednie_temperatury_kraje = dane_kraje.groupby('Kraj')['Temperatura_srednia'].mean()
+srednie_temperatury_miasta = dane_miasta.groupby('Miasto')['Temperatura_srednia'].mean()
+
+# Kraj z najniższą temperaturą średnią
+kraj_min_temp = srednie_temperatury_kraje.idxmin()
+temp_min_kraj = srednie_temperatury_kraje.min()
+
+# Kraj z najwyższą temperaturą średnią
+kraj_max_temp = srednie_temperatury_kraje.idxmax()
+temp_max_kraj = srednie_temperatury_kraje.max()
+
+# Miasto z najniższą temperaturą średnią
+miasto_min_temp = srednie_temperatury_miasta.idxmin()
+temp_min_miasto = srednie_temperatury_miasta.min()
+
+# Miasto z najwyższą temperaturą średnią
+miasto_max_temp = srednie_temperatury_miasta.idxmax()
+temp_max_miasto = srednie_temperatury_miasta.max()
+
+# Średnia temperatura na świecie w latach 1900-2012
+srednia_temperatura_swiat = dane['Temperatura_srednia'].mean()
+
+# Stworzenie Frame'a  dla najniższych i najwyższych średnich temperatur oraz średniej temperatury na świecie
+naj1 = pd.DataFrame({
+    'Typ': [
+        'Kraj - Najniższa', 'Kraj - Najwyższa',
+        'Miasto - Najniższa', 'Miasto - Najwyższa',
+        'Średnia Światowa'
+    ],
+    'Lokalizacja': [
+        kraj_min_temp, kraj_max_temp,
+        miasto_min_temp, miasto_max_temp,
+        'Świat'
+    ],
+    'Temperatura': [
+        temp_min_kraj, temp_max_kraj,
+        temp_min_miasto, temp_max_miasto,
+        srednia_temperatura_swiat
+    ]
+})
+
+# Wykres słupkowy
+fig, ax = plt.subplots(figsize=(12, 8))
+bars = naj1.plot(ax=ax, kind='bar', x='Typ', y='Temperatura', legend=False, width=0.6, color=['blue', 'red', 'green', 'orange', 'purple'])
+
+for i, bar in enumerate(ax.patches):
+    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.2,
+            f"{naj1['Temperatura'].iloc[i]:.2f} °C\n{naj1['Lokalizacja'].iloc[i]}",
+            ha='center', va='bottom', rotation=0)
+
+plt.title('Najniższe i najwyższe średnie temperatury krajów i miast w zestawieniu ze średnią temperaturą na świecie (1900-2012)')
+plt.ylabel('Średnia Temperatura (°C)')
+plt.xticks(rotation=0)
+plt.tight_layout()
+plt.show()
+
+# Sprawdzenie średnich temperatur w całym okresie w Polsce i Pakistanie
+srednia_temp_polska = dane_polska['Temperatura_srednia'].mean()
+srednia_temp_pakistan = dane_pakistan['Temperatura_srednia'].mean()
+
+sred1 = pd.DataFrame({
+    'Region': ['Polska', 'Pakistan', 'Świat'],
+    'Średnia Temperatura': [srednia_temp_polska, srednia_temp_pakistan, srednia_temperatura_swiat]
+})
+
+# Wykres słupkowy
+# fig, ax = plt.subplots(figsize=(10, 6))
+# bars = sred1.plot(ax=ax, kind='bar', x='Region', y='Średnia Temperatura', legend=False, width=0.6, color=['blue', 'red', 'green'])
+# for i, bar in enumerate(ax.patches):
+#     ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
+#             f"{sred1['Średnia Temperatura'].iloc[i]:.2f} °C",
+#             ha='center', va='bottom', rotation=0)
+#
+# plt.title('Średnie temperatury w Polsce, Pakistanie i na świecie (1900-2012)')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.xlabel('Region')
+# plt.xticks(rotation=0)
+# plt.tight_layout()
+# plt.show()
+
+# Sprawdzenie najwyższych i najniższych temperatur miesięcznych dla Świata Polski i Pakistanu
+min_global = dane.loc[dane['Temperatura_srednia'].idxmin()]
+max_global = dane.loc[dane['Temperatura_srednia'].idxmax()]
+
+min_polska = dane_polska.loc[dane_polska['Temperatura_srednia'].idxmin()]
+max_polska = dane_polska.loc[dane_polska['Temperatura_srednia'].idxmax()]
+
+min_pakistan = dane_pakistan.loc[dane_pakistan['Temperatura_srednia'].idxmin()]
+max_pakistan = dane_pakistan.loc[dane_pakistan['Temperatura_srednia'].idxmax()]
+
+# Frame z wynikami
+wiz1 = pd.DataFrame({
+    'Kraj': ['Świat', 'Świat', 'Polska', 'Polska', 'Pakistan', 'Pakistan'],
+    'Typ': ['Najniższa', 'Najwyższa', 'Najniższa', 'Najwyższa', 'Najniższa', 'Najwyższa'],
+    'Temperatura': [min_global['Temperatura_srednia'], max_global['Temperatura_srednia'],
+                    min_polska['Temperatura_srednia'], max_polska['Temperatura_srednia'],
+                    min_pakistan['Temperatura_srednia'], max_pakistan['Temperatura_srednia']],
+    'Data': [min_global['Miesiac'], max_global['Miesiac'],
+             min_polska['Miesiac'], max_polska['Miesiac'],
+             min_pakistan['Miesiac'], max_pakistan['Miesiac']]
+                     })
+
+# Wykres słupkowy
+# wiz1_pivot = wiz1.pivot(index='Kraj', columns='Typ', values='Temperatura')
+# ax = wiz1_pivot.plot(kind='bar', figsize=(10, 6))
+# plt.title('Najniższe i najwyższe średnie temperatury miesięczne')
+# plt.xlabel('Region')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.legend(title='Typ')
+#
+# plt.title('Najniższe i najwyższe średnie temperatury miesięczne (1900-2012)')
+# plt.xlabel('Region')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.legend(title='Typ')
+#
+# bar_locations = ax.patches
+#
+# for bar, data in zip(bar_locations, wiz1['Data']):
+#     height = bar.get_height()
+#     ax.text(bar.get_x() + bar.get_width()/2, height + 0.1, f"{data.strftime('%Y-%m')}\n {height.round(2)} °C", ha='center', va='bottom', rotation=0)
+
+# plt.show()
+
+
+# Sprawdzenie najwyższych i najniższych temperatur rocznych dla Świata Polski i Pakistanu
+
+# Obliczenie średnich rocznych temperatur dla każdego kraju
+srednie_roczne_swiat = dane.groupby('Rok')['Temperatura_srednia'].mean()
+srednie_roczne_polska = dane_kraje[dane_kraje['Kraj'] == 'Poland'].groupby('Rok')['Temperatura_srednia'].mean()
+srednie_roczne_pakistan = dane_kraje[dane_kraje['Kraj'] == 'Pakistan'].groupby('Rok')['Temperatura_srednia'].mean()
+
+# Znalezienie najzimniejszych i najcieplejszych lat
+min_global_rok = srednie_roczne_swiat.idxmin()
+max_global_rok = srednie_roczne_swiat.idxmax()
+
+min_polska_rok = srednie_roczne_polska.idxmin()
+max_polska_rok = srednie_roczne_polska.idxmax()
+
+min_pakistan_rok = srednie_roczne_pakistan.idxmin()
+max_pakistan_rok = srednie_roczne_pakistan.idxmax()
+
+# Stworzenie Frame'a dla najzimniejszych i najcieplejszych lat
+wiz2 = pd.DataFrame({
+    'Kraj': ['Świat', 'Świat', 'Polska', 'Polska', 'Pakistan', 'Pakistan'],
+    'Typ': ['Najniższy Rok', 'Najwyższy Rok', 'Najniższy Rok', 'Najwyższy Rok', 'Najniższy Rok', 'Najwyższy Rok'],
+    'Temperatura': [srednie_roczne_swiat[min_global_rok], srednie_roczne_swiat[max_global_rok],
+                    srednie_roczne_polska[min_polska_rok], srednie_roczne_polska[max_polska_rok],
+                    srednie_roczne_pakistan[min_pakistan_rok], srednie_roczne_pakistan[max_pakistan_rok]],
+    'Data': [min_global_rok, max_global_rok, min_polska_rok, max_polska_rok, min_pakistan_rok, max_pakistan_rok]
+})
+
+# Wykres
+# wiz2_pivot = wiz2.pivot(index='Kraj', columns='Typ', values='Temperatura')
+# ax = wiz2_pivot.plot(kind='bar', figsize=(10, 6))
+# plt.title('Najniższe i najwyższe średnie roczne temperatury')
+# plt.xlabel('Region')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.legend(title='Typ')
+#
+# bar_locations = ax.patches
+#
+# for bar, data in zip(bar_locations, wiz2['Data']):
+#     height = bar.get_height()
+#     ax.text(bar.get_x() + bar.get_width()/2, height + 0.1, f"{data}\n{height.round(2)} °C", ha='center', va='bottom', rotation=0)
+
+# plt.show()
+
+# Najcieplejsze miasta Świata, Polski, Pakistanu
+
+# Stworzenie zbiorów dla Polski i Pakistanu z danych miejskich
+dane_polska_miasta = dane_miasta[dane_miasta['Kraj'] == 'Poland']
+dane_pakistan_miasta = dane_miasta[dane_miasta['Kraj'] == 'Pakistan']
+
+# średnio najcieplejsze i najzimniejsze miasta na świecie
+max_miasto_swiat = dane_miasta.groupby('Miasto')['Temperatura_srednia'].mean().idxmax()
+min_miasto_swiat = dane_miasta.groupby('Miasto')['Temperatura_srednia'].mean().idxmin()
+
+# średnio najcieplejsze i najzimniejsze miasta w Polsce
+max_miasto_polska = dane_polska_miasta.groupby('Miasto')['Temperatura_srednia'].mean().idxmax()
+min_miasto_polska = dane_polska_miasta.groupby('Miasto')['Temperatura_srednia'].mean().idxmin()
+
+# średnio najcieplejsze i najzimniejsze miasta w Pakistanie
+max_miasto_pakistan = dane_pakistan_miasta.groupby('Miasto')['Temperatura_srednia'].mean().idxmax()
+min_miasto_pakistan = dane_pakistan_miasta.groupby('Miasto')['Temperatura_srednia'].mean().idxmin()
+
+# wartości temperatur dla najcieplejszych i najzimniejszych miast
+temperatura_max_swiat = dane_miasta[dane_miasta['Miasto'] == max_miasto_swiat]['Temperatura_srednia'].mean()
+temperatura_min_swiat = dane_miasta[dane_miasta['Miasto'] == min_miasto_swiat]['Temperatura_srednia'].mean()
+
+temperatura_max_polska = dane_polska_miasta[dane_polska_miasta['Miasto'] == max_miasto_polska]['Temperatura_srednia'].mean()
+temperatura_min_polska = dane_polska_miasta[dane_polska_miasta['Miasto'] == min_miasto_polska]['Temperatura_srednia'].mean()
+
+temperatura_max_pakistan = dane_pakistan_miasta[dane_pakistan_miasta['Miasto'] == max_miasto_pakistan]['Temperatura_srednia'].mean()
+temperatura_min_pakistan = dane_pakistan_miasta[dane_pakistan_miasta['Miasto'] == min_miasto_pakistan]['Temperatura_srednia'].mean()
+
+# Frame danych do wykresu
+naj2 = pd.DataFrame({
+    'Miasto': [max_miasto_swiat, min_miasto_swiat, max_miasto_polska, min_miasto_polska, max_miasto_pakistan, min_miasto_pakistan],
+    'Typ': ['Najwyższa temperatura- świat', 'Najniższa temperatura- świat', 'Najwyższa temperatura- Polska', 'Najniższa temperatura-Polska', 'Najwyższa temperatura- Pakistan', 'Najniższa temperatura-Pakistan' ],
+    'Temperatura': [temperatura_max_swiat, temperatura_min_swiat, temperatura_max_polska, temperatura_min_polska, temperatura_max_pakistan, temperatura_min_pakistan]
+})
+
+# Wykres słupkowy
+# fig, ax = plt.subplots(figsize=(10, 6))
+# bars = naj2.plot(ax=ax, kind='bar', x='Typ', y='Temperatura', legend=False, width=0.6, color=['blue', 'red'])
+# for i, bar in enumerate(ax.patches):
+#     ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.2, f"{naj2['Temperatura'].iloc[i]:.2f} °C, {naj2['Miasto'].iloc[i]}",
+#             ha='center', va='bottom', rotation=0)
+# plt.title('Najzimniejsze i najcieplejsze miasta Świata, Polski i Pakistanu')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.xticks(rotation=0)
+# plt.tight_layout()
+# plt.show()
+
+# Wykresy liniowe rocznych temperatur dla swiata, polski, pakistanu
+#Zebranie rocznych srednich temperatur
+srednia_roczna_global = dane.groupby('Rok')['Temperatura_srednia'].mean()
+srednia_roczna_polska = dane_polska.groupby('Rok')['Temperatura_srednia'].mean()
+srednia_roczna_pakistan =dane_pakistan.groupby('Rok')['Temperatura_srednia'].mean()
+# wykres
+# plt.figure(figsize=(12, 8))
+#
+# plt.plot(srednia_roczna_global.index, srednia_roczna_global, label='Świat', marker='o')
+# plt.plot(srednia_roczna_polska.index, srednia_roczna_polska, label='Polska', marker='o')
+# plt.plot(srednia_roczna_pakistan.index, srednia_roczna_pakistan, label='Pakistan', marker='o')
+#
+# plt.title('Roczne średnie temperatury (1900-2012)')
+# plt.xlabel('Rok')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.legend()
+#
+# plt.grid(True)
+# plt.tight_layout()
+# plt.show()
+
+# Znalezienie w których krajach wystąpił najcieplejszy i najzimniejszy miesiąc w historii
+
+# Znalezienie najzimniejszego i najcieplejszego miesiąca w historii
+najzimniejszy_miesiac = dane_kraje['Temperatura_srednia'].idxmin()
+najcieplejszy_miesiac = dane_kraje['Temperatura_srednia'].idxmax()
+
+# W ktorym kraju
+kraj_najzimniejszy_miesiac = dane_kraje.loc[najzimniejszy_miesiac, 'Kraj']
+kraj_najcieplejszy_miesiac = dane_kraje.loc[najcieplejszy_miesiac, 'Kraj']
+
+# Stworzenie DataFrame dla danych do wykresu
+wiz3 = pd.DataFrame({
+    'Kraj': [kraj_najzimniejszy_miesiac, kraj_najcieplejszy_miesiac],
+    'Typ': ['Najzimniejszy Miesiąc', 'Najcieplejszy Miesiąc'],
+    'Temperatura': [dane_kraje.loc[najzimniejszy_miesiac, 'Temperatura_srednia'], dane_kraje.loc[najcieplejszy_miesiac, 'Temperatura_srednia']],
+    'Data': [f"{dane_kraje.loc[najzimniejszy_miesiac, 'Miesiac'].strftime('%Y-%m')}",
+             f"{dane_kraje.loc[najcieplejszy_miesiac, 'Miesiac'].strftime('%Y-%m')}"]
+})
+
+# Wykres słupkowy
+# fig, ax = plt.subplots(figsize=(8, 6))
+# bars = wiz3.plot(ax=ax, kind='bar', x='Typ', y='Temperatura', legend=False, width=0.6, color=['blue', 'red'])
+#
+# for i, bar in enumerate(ax.patches):
+#     ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.2, f"{wiz3['Data'].iloc[i]}, {wiz3['Temperatura'].iloc[i]:.2f} °C\n{wiz3['Kraj'].iloc[i]}",
+#             ha='center', va='bottom', rotation=0)
+#
+# plt.title('Najzimniejszy i najcieplejszy miesiąc w historii')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.xticks(rotation=0)
+# plt.tight_layout()
+# plt.show()
+
+# Najcieplejszy i najzimniejszy rok
+# Obliczenie średnich rocznych dla każdego kraju i roku
+srednie_roczne = dane_kraje.groupby(['Kraj', 'Rok'])['Temperatura_srednia'].mean().reset_index()
+
+# Znalezienie roku z najniższą i najwyższą średnią temperaturą
+
+najzimniejszy_rok = srednie_roczne.loc[srednie_roczne['Temperatura_srednia'].idxmin()]
+najcieplejszy_rok = srednie_roczne.loc[srednie_roczne['Temperatura_srednia'].idxmax()]
+
+#DataFrame dla danych do wykresu
+wiz4 = pd.DataFrame({
+    'Kraj': [najzimniejszy_rok['Kraj'], najcieplejszy_rok['Kraj']],
+    'Typ': ['Najzimniejszy Rok', 'Najcieplejszy Rok'],
+    'Temperatura': [najzimniejszy_rok['Temperatura_srednia'], najcieplejszy_rok['Temperatura_srednia']],
+    'Rok': [najzimniejszy_rok['Rok'], najcieplejszy_rok['Rok']]
+})
+
+# Wykres słupkowy
+# fig, ax = plt.subplots(figsize=(8, 6))
+# bars = wiz4.plot(ax=ax, kind='bar', x='Typ', y='Temperatura', legend=False, width=0.6, color=['blue', 'red'])
+#
+# for i, bar in enumerate(ax.patches):
+#     ax.text(bar.get_x() + bar.get_width() / 2, (bar.get_height() + 0.2),
+#             f"{wiz4['Rok'].iloc[i]} rok, {wiz4['Temperatura'].iloc[i]:.2f} °C\n{wiz4['Kraj'].iloc[i]}",
+#             ha='center', va='bottom', rotation=0)
+#
+# plt.title('Najzimniejszy i najcieplejszy rok w historii')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.xticks(rotation=0)
+# plt.tight_layout()
+# plt.show()
+
+
+# Najcieplejsza i najzimniejsza dekada
+# Obliczenie średnich dekad dla każdego kraju i roku
+srednie_dekadowe = dane_kraje.groupby(['Kraj', 'Dekada'])['Temperatura_srednia'].mean().reset_index()
+
+# Znalezienie dekady z najniższą i najwyższą średnią temperaturą
+
+najzimniejsza_dekada = srednie_dekadowe.loc[srednie_dekadowe['Temperatura_srednia'].idxmin()]
+najcieplejsza_dekada = srednie_dekadowe.loc[srednie_dekadowe['Temperatura_srednia'].idxmax()]
+
+# Stworzenie DataFrame dla danych do wykresu
+wiz5 = pd.DataFrame({
+    'Kraj': [najzimniejsza_dekada['Kraj'], najcieplejsza_dekada['Kraj']],
+    'Typ': ['Najzimniejsza Dekada', 'Najcieplejsza Dekada'],
+    'Temperatura': [najzimniejsza_dekada['Temperatura_srednia'], najcieplejsza_dekada['Temperatura_srednia']],
+    'Dekada': [najzimniejsza_dekada['Dekada'], najcieplejsza_dekada['Dekada']]
+})
+
+# Wykres słupkowy
+# fig, ax = plt.subplots(figsize=(8, 6))
+# bars = wiz5.plot(ax=ax, kind='bar', x='Typ', y='Temperatura', legend=False, width=0.6, color=['blue', 'red'])
+
+# for i, bar in enumerate(ax.patches):
+#     ax.text(bar.get_x() + bar.get_width() / 2, (bar.get_height() + 0.2),
+#             f"Dekada {wiz5['Dekada'].iloc[i]}, {wiz5['Temperatura'].iloc[i]:.2f} °C\n{wiz5['Kraj'].iloc[i]}",
+#             ha='center', va='bottom', rotation=0)
+#
+# plt.title('Najzimniejsza i najcieplejsza dekada w jednym kraju w historii')
+# plt.ylabel('Średnia Temperatura (°C)')
+# plt.xticks(rotation=0)
+# plt.tight_layout()
+# plt.show()
+
+
+#REGRESJE
+#######################################
+# Test regresji
+def evaluate_regr(y_true, y_pred, name='Train'):
+    print(name)
+    print('MAE', mean_absolute_error(y_true, y_pred))
+    print('MSE', mean_squared_error(y_true, y_pred))
+    print('R2', r2_score(y_true, y_pred), '\n')
+
+
+# Regresja dla Polski
+# srednia_roczna_polska = srednia_roczna_polska.reset_index()
+
+# X = srednia_roczna_polska[['Rok']].to_numpy()
+# y = srednia_roczna_polska['Temperatura_srednia'].to_numpy()
+dane_polska['Miesiac'] = pd.to_datetime(dane_polska['Miesiac'])
+dane_polska['Rok'] = dane_polska['Miesiac'].dt.year
+
+# Grupowanie i obliczanie średniej rocznej
+srednia_roczna_polska = dane_polska.groupby('Rok')['Temperatura_srednia'].mean().reset_index()
+
+
+
+# X = srednia_roczna_polska['Rok'].values.reshape(-1, 1)
+# y = srednia_roczna_polska['Temperatura_srednia'].values
+
+# # Podział danych na zbiór treningowy i testowy
+# X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15)
+#
+# modelu regresji liniowej
+# model = LinearRegression()
+# model.fit(X_train, y_train)
+#
+# # Pred dla zbioru treningowego i testowego
+# y_pred_train = model.predict(X_train)
+# y_pred_test = model.predict(X_test)
+#
+# # Ocena wyniku regresji
+# evaluate_regr(y_train, y_pred_train, 'Train')
+# evaluate_regr(y_test, y_pred_test, 'Test')
+#
+# coefficients = model.coef_
+# intercept = model.intercept_
+#
+# print(f'Współczynniki regresji liniowej: {coefficients}')
+# print(f'Wyraz wolny (intercept): {intercept}')
+#
+# # Użycie pipeline dla regresji wielomian
+# pipe = Pipeline([
+#     ('poly', PolynomialFeatures(degree=2)),
+#     ('linreg', LinearRegression())
+# ])
+# pipe.fit(X_train, y_train)
+#
+# # Predykcje dla zbioru treningowego i testowego dla regresji wielomianowej
+# y_pred_train_poly = pipe.predict(X_train)
+# y_pred_test_poly = pipe.predict(X_test)
+#
+# # Ocena wyniku regresji wielomianowej
+# evaluate_regr(y_train, y_pred_train_poly, 'Train (Polynomial)')
+# evaluate_regr(y_test, y_pred_test_poly, 'Test (Polynomial)')
+#
+# # Współczynniki
+# linreg = pipe.named_steps['linreg']
+# poly_features = pipe.named_steps['poly']
+# coefficients = linreg.coef_
+# intercept = linreg.intercept_
+
+#
+# print('Współczynniki regresji wielomianowej:')
+# print(f'Wyraz wolny: {intercept}')
+# for i, coef in enumerate(coefficients.flatten(), 1):
+#     print(f'Współczynnik przy x^{i}: {coef}')
+#
+# # wykres dla regresji liniowej i wielomianowej
+# plt.figure(figsize=(14, 7))
+#
+# plt.scatter(X, y, color='blue', label='Dane rzeczywiste', alpha=0.5)
+#
+#  Linia predykcji dla całego zbioru danych (regresja liniowa)
+# plt.plot(X, model.predict(X), color='red', linewidth=2, label='Regresja liniowa')
+#
+#  Linia predykcji dla całego zbioru danych (regresja wielomianowa)
+# plt.plot(X, pipe.predict(X), color='orange', linewidth=2, label='Regresja wielomianowa (stopień 2)')
+#
+# plt.xlabel('Rok')
+# plt.ylabel('Temperatura średnia')
+# plt.title('Regresja dla średniej rocznej temperatury w Polsce')
+# plt.legend()
+# plt.grid(True)
+# plt.show()
+#####################################################
+
+# regresja dla kazdego kraju i swiata
+
+
+# grupowanie danych wg kraju
+# grupa = dane_kraje.groupby('Kraj')
+#
+# wyniki = []
+#
+# for name, group in grupa:
+#     X = group['Rok'].values.reshape(-1, 1)
+#     y = group['Temperatura_srednia'].values
+#
+#     model = LinearRegression()
+#     model.fit(X, y)
+#
+#     coef = model.coef_[0]
+#     intercept = model.intercept_
+#     r2 = model.score(X, y)
+#
+#     wyniki.append({
+#         'Kraj': name,
+#         'Wspolczynnik': coef,
+#         'Wyraz wolny': intercept,
+#         'R2': r2
+#     })
+#
+# wyniki_regresji = pd.DataFrame(wyniki)
+#
+# max_coef = wyniki_regresji.loc[wyniki_regresji['Wspolczynnik'].idxmax()]
+# min_coef = wyniki_regresji.loc[wyniki_regresji['Wspolczynnik'].idxmin()]
+#
+# print("Kraj z najwyższym współczynnikiem:")
+# print(max_coef)
+#
+# print("\nKraj z najniższym współczynnikiem:")
+# print(min_coef)
+# #
+# # # Regresja cały świat
+# #
+grupa1 = dane.groupby('Rok')['Temperatura_srednia'].mean().reset_index()
+
+X1 = grupa1['Rok'].values.reshape(-1, 1)
+y1 = grupa1['Temperatura_srednia'].values
+
+model1 = LinearRegression()
+model1.fit(X1, y1)
+
+coef_global = model1.coef_[0]
+intercept_global = model1.intercept_
+r2_global = model1.score(X1, y1)
+#
+# # # Wykres slupkowy
+# countries = [max_coef['Kraj'], min_coef['Kraj'], 'Świat']
+# coeficients = [max_coef['Wspolczynnik'], min_coef['Wspolczynnik'], coef_global]
+#
+# plt.figure(figsize=(10, 6))
+# plt.bar(countries, coeficients, color=['green', 'blue', 'orange'])
+# plt.xlabel('Region')
+# plt.ylabel('Współczynnik nachylenia (coef)')
+# plt.title('Porównanie współczynników nachylenia dla kraju z najwyższym, najniższym współczynnikiem i globalnie')
+# plt.grid(True)
+# plt.show()
+
+# #################
+
+# Regresja dla miast
+
+# grupowanie danych wg miasta
+grupa2 = dane_miasta.groupby('Miasto')
+
+wyniki_miasta = []
+#
+for name, group in grupa2:
+    X = group['Rok'].values.reshape(-1, 1)
+    y = group['Temperatura_srednia'].values
+
+    model2 = LinearRegression()
+    model2.fit(X, y)
+
+    coef = model2.coef_[0]
+    intercept = model2.intercept_
+    r2 = model2.score(X, y)
+#
+    wyniki_miasta.append({
+        'Miasto': name,
+        'Wspolczynnik': coef,
+        'Wyraz wolny': intercept,
+        'R2': r2
+    })
+#
+wyniki_regresji_miasta = pd.DataFrame(wyniki_miasta)
+#
+# max_coef_miasta = wyniki_regresji_miasta.loc[wyniki_regresji_miasta['Wspolczynnik'].idxmax()]
+# min_coef_miasta = wyniki_regresji_miasta.loc[wyniki_regresji_miasta['Wspolczynnik'].idxmin()]
+#
+# print("Miasto z najwyższym współczynnikiem:")
+# print(max_coef_miasta)
+#
+# print("\nMiasto z najniższym współczynnikiem:")
+# print(min_coef_miasta)
+
+# # Wykres slupkowy
+# miasta = [max_coef_miasta['Miasto'], min_coef_miasta['Miasto'], 'Świat']
+# coeficients = [max_coef_miasta['Wspolczynnik'], min_coef_miasta['Wspolczynnik'], coef_global]
+#
+# plt.figure(figsize=(10, 6))
+# plt.bar(miasta, coeficients, color=['green', 'blue', 'orange'])
+# plt.xlabel('Miasta')
+# plt.ylabel('Współczynnik nachylenia (coef)')
+# plt.title('Porównanie współczynników nachylenia regresji dla kraju z najwyższym, najniższym współczynnikiem i globalnie')
+# plt.grid(True)
+# plt.show()
+
+# ############
+
+# Polska / Pakistan / Świat Regresja
+grupa3 = dane_polska.groupby('Rok')['Temperatura_srednia'].mean().reset_index()
+
+X3 = grupa3['Rok'].values.reshape(-1, 1)
+y3 = grupa3['Temperatura_srednia'].values
+
+model3 = LinearRegression()
+model3.fit(X3, y3)
+
+coef_polska = model3.coef_[0]
+intercept_polska = model3.intercept_
+r2_polska = model3.score(X3, y3)
+
+grupa4 = dane_pakistan.groupby('Rok')['Temperatura_srednia'].mean().reset_index()
+
+X4 = grupa4['Rok'].values.reshape(-1, 1)
+y4 = grupa4['Temperatura_srednia'].values
+
+model4 = LinearRegression()
+model4.fit(X4, y4)
+
+coef_pakistan = model4.coef_[0]
+intercept_pakistan = model4.intercept_
+r2_pakistan = model4.score(X4, y4)
+
+# Wykres
+# miejsca = ['Polska', 'Pakistan', 'Świat']
+# coeficients = [coef_polska, coef_pakistan, coef_global]
+#
+# plt.figure(figsize=(10, 6))
+# plt.bar(miejsca, coeficients, color=['green', 'blue', 'orange'])
+# plt.xlabel('Państwo')
+# plt.ylabel('Współczynnik nachylenia (coef)')
+# plt.title('Porównanie współczynników nachylenia regresji dla Polski, Pakistanu i świata')
+# plt.grid(True)
+# plt.show()
+
+# Regresja miasta Polska / Pakistan
+
+
+grupa5 = dane_polska_miasta.groupby('Miasto')
+
+wyniki_polska_miasta = []
+#
+for name, group in grupa5:
+    X5 = group['Rok'].values.reshape(-1, 1)
+    y5 = group['Temperatura_srednia'].values
+
+    model5 = LinearRegression()
+    model5.fit(X5, y5)
+
+    coef = model5.coef_[0]
+    intercept = model5.intercept_
+    r2 = model5.score(X5, y5)
+#
+    wyniki_polska_miasta.append({
+        'Miasto': name,
+        'Wspolczynnik': coef,
+        'Wyraz wolny': intercept,
+        'R2': r2
+    })
+#
+wyniki_regresji_polska_miasta = pd.DataFrame(wyniki_polska_miasta)
+
+max_coef_polska_miasta = wyniki_regresji_polska_miasta.loc[wyniki_regresji_polska_miasta['Wspolczynnik'].idxmax()]
+min_coef_polska_miasta = wyniki_regresji_polska_miasta.loc[wyniki_regresji_polska_miasta['Wspolczynnik'].idxmin()]
+
+# print("Miasto z najwyższym współczynnikiem:")
+# print(max_coef_polska_miasta)
+#
+# print("\nMiasto z najniższym współczynnikiem:")
+# print(min_coef_polska_miasta)
+
+# Pakistan
+
+grupa6 = dane_pakistan_miasta.groupby('Miasto')
+
+wyniki_pakistan_miasta = []
+#
+for name, group in grupa6:
+    X6 = group['Rok'].values.reshape(-1, 1)
+    y6 = group['Temperatura_srednia'].values
+
+    model6 = LinearRegression()
+    model6.fit(X6, y6)
+
+    coef = model6.coef_[0]
+    intercept = model6.intercept_
+    r2 = model6.score(X6, y6)
+#
+    wyniki_pakistan_miasta.append({
+        'Miasto': name,
+        'Wspolczynnik': coef,
+        'Wyraz wolny': intercept,
+        'R2': r2
+    })
+#
+wyniki_regresji_pakistan_miasta = pd.DataFrame(wyniki_pakistan_miasta)
+
+max_coef_pakistan_miasta = wyniki_regresji_pakistan_miasta.loc[wyniki_regresji_pakistan_miasta['Wspolczynnik'].idxmax()]
+min_coef_pakistan_miasta = wyniki_regresji_pakistan_miasta.loc[wyniki_regresji_pakistan_miasta['Wspolczynnik'].idxmin()]
+#
+# print("Miasto z najwyższym współczynnikiem:")
+# print(max_coef_pakistan_miasta)
+#
+# print("\nMiasto z najniższym współczynnikiem:")
+# print(min_coef_pakistan_miasta)
+
+# Wykres
+miejsca = [
+    max_coef_polska_miasta['Miasto'], min_coef_polska_miasta['Miasto'],
+    'Ogólny Polska', max_coef_pakistan_miasta['Miasto'],
+    min_coef_pakistan_miasta['Miasto'], 'Ogólny Pakistan'
+]
+coeficients = [
+    max_coef_polska_miasta['Wspolczynnik'],
+    min_coef_polska_miasta['Wspolczynnik'],
+    coef_polska,
+    max_coef_pakistan_miasta['Wspolczynnik'],
+    min_coef_pakistan_miasta['Wspolczynnik'],
+    coef_pakistan
+]
+
+# plt.figure(figsize=(10, 6))
+# plt.bar(miejsca, coeficients, color=['green', 'blue', 'orange'])
+# plt.xlabel('Miasto / Współczynnik ogólny')
+# plt.ylabel('Współczynnik nachylenia (coef)')
+# plt.title('Porównanie skrajnych współczynników nachylenia regresji dla miast z Polski i Pakistanu ze współczynnikami ogólnymi w tych krajach')
+# plt.grid(True)
+# plt.xticks(rotation=45)
+# plt.ylim(0, None)
+# plt.tight_layout()
+# plt.show()
+
+#Korelacja z szerokością i wysokością geograficzną
+# szerokosc
+def clean_coordinates(coord):
+    # Funkcja do czyszczenia i konwersji współrzędnych geograficznych
+    if coord[-1] in ['N', 'S', 'E', 'W']:
+        return float(coord[:-1])
+    return np.nan
+
+# Czyszczenie współrzędnych geog
+dane_miasta['Latitude'] = dane_miasta['Latitude'].apply(clean_coordinates)
+dane_miasta['Longitude'] = dane_miasta['Longitude'].apply(clean_coordinates)
+
+# Podział na dane treningowe i testowe
+X_train_lat, X_test_lat, y_train_lat, y_test_lat = train_test_split(
+    dane_miasta['Latitude'].values.reshape(-1, 1),
+    dane_miasta['Temperatura_srednia'].values,
+    test_size=0.2,
+)
+
+# Model regresji liniowej dla Latitude
+model_lat = LinearRegression()
+model_lat.fit(X_train_lat, y_train_lat)
+
+# Pred dla danych test
+y_pred_lat = model_lat.predict(X_test_lat)
+
+# współczynniki dla Latitude
+coef_latitude = model_lat.coef_[0]
+intercept_latitude = model_lat.intercept_
+r2_latitude = r2_score(y_test_lat, y_pred_lat)
+rmse_latitude = np.sqrt(mean_squared_error(y_test_lat, y_pred_lat))
+
+
+# print("Dla szerokości geograficznej (Latitude):")
+# print(f"Współczynnik R2: {r2_latitude:.4f}")
+# print(f"Średni błąd kwadratowy (RMSE): {rmse_latitude:.2f}")
+# print(f"Wyraz wolny: {intercept_latitude:.4f}")
+# print(f"Współczynnik coef dla szerokości geograficznej: {coef_latitude:.4f}")
+
+# dane treningowe i testowe dla Longitude
+X_train_lon, X_test_lon, y_train_lon, y_test_lon = train_test_split(
+    dane_miasta['Longitude'].values.reshape(-1, 1),
+    dane_miasta['Temperatura_srednia'].values,
+    test_size=0.2,
+)
+
+# Model regresji liniowej dla Longitude
+model_lon = LinearRegression()
+model_lon.fit(X_train_lon, y_train_lon)
+
+# Predykcja dla danych testowych
+y_pred_lon = model_lon.predict(X_test_lon)
+
+#współczynniki modelu dla Longitude
+coef_longitude = model_lon.coef_[0]
+intercept_longitude = model_lon.intercept_
+r2_longitude = r2_score(y_test_lon, y_pred_lon)
+rmse_longitude = np.sqrt(mean_squared_error(y_test_lon, y_pred_lon))
+
+# print("\nDla długości geograficznej (Longitude):")
+# print(f"Współczynnik R2: {r2_longitude:.4f}")
+# print(f"Średni błąd kwadratowy (RMSE): {rmse_longitude:.2f}")
+# print(f"Wyraz wolny: {intercept_longitude:.4f}")
+# print(f"Współczynnik coef dla długości geograficznej: {coef_longitude:.4f}")
+
+#KNEIGHBORS temp -  long lat
+
+# X8 = dane_miasta['Latitude'].values.reshape(-1, 1)
+# y8 = dane_miasta['Temperatura_srednia'].values
+#
+# zbiór treningowy i testowy
+# X8_train, X8_test, y8_train, y8_test = train_test_split(X8, y8, test_size=0.2,)
+#
+# KNeighborsRegressor dla Latitude
+# model8_latitude = KNeighborsRegressor(n_neighbors=2)
+# model8_latitude.fit(X8_train, y8_train)
+#
+# # Pred na danych testowych
+# y8_pred_latitude = model8_latitude.predict(X8_test)
+#
+# # Ocena modelu
+# r2_latitude_8 = r2_score(y8_test, y8_pred_latitude)
+# rmse_latitude_8 = np.sqrt(mean_squared_error(y8_test, y8_pred_latitude))
+#
+#
+# print("Dla szerokości geograficznej:")
+# print(f"Współczynnik R2: {r2_latitude_8:.4f}")
+# print(f"Średni błąd kwadratowy (RMSE): {rmse_latitude_8:.2f}")
+#
+# # Przygotowanie danych dla Longitude
+# X8 = dane_miasta['Longitude'].values.reshape(-1, 1)
+# y8 = dane_miasta['Temperatura_srednia'].values
+#
+# #zbiór treningowy i testowy
+# X8_train, X8_test, y8_train, y8_test = train_test_split(X8, y8, test_size=0.2, random_state=3)
+#
+# KNeighborsRegressor dla Longitude
+# model8_longitude = KNeighborsRegressor(n_neighbors=2)
+# model8_longitude.fit(X8_train, y8_train)
+#
+# # Pred na danych testowych
+# y8_pred_longitude = model8_longitude.predict(X8_test)
+#
+# # Ocena modelu
+# r2_longitude_8 = r2_score(y8_test, y8_pred_longitude)
+# rmse_longitude_8 = np.sqrt(mean_squared_error(y8_test, y8_pred_longitude))
+#
+#
+# print("\nDla długości geograficznej:")
+# print(f"Współczynnik R2: {r2_longitude_8:.4f}")
+# print(f"Średni błąd kwadratowy (RMSE): {rmse_longitude_8:.2f}")
+
+# łączenie ramek
+dane_zlaczone = pd.merge(wyniki_regresji_miasta, dane_miasta, on='Miasto')
+
+# Regresja lat / long - coef
+#
+# X_lat =dane_zlaczone[['Latitude']].values
+# X_lon = dane_zlaczone[['Longitude']].values
+# y_coef = dane_zlaczone['Wspolczynnik'].values
+#
+# # zbiór treningowy i testowy
+# X_lat_train, X_lat_test, y_lat_train, y_lat_test = train_test_split(X_lat, y_coef, test_size=0.2,)
+# X_lon_train, X_lon_test, y_lon_train, y_lon_test = train_test_split(X_lon, y_coef, test_size=0.2,)
+#
+# # Model regresji liniowej dla Latitude
+# model_lat = LinearRegression()
+# model_lat.fit(X_lat_train, y_lat_train)
+# y_lat_pred = model_lat.predict(X_lat_test)
+#
+# # Model regresji liniowej dla Longitude
+# model_lon = LinearRegression()
+# model_lon.fit(X_lon_train, y_lon_train)
+# y_lon_pred = model_lon.predict(X_lon_test)
+#
+# #  dla Latitude
+# r2_lat = r2_score(y_lat_test, y_lat_pred)
+# rmse_lat = np.sqrt(mean_squared_error(y_lat_test, y_lat_pred))
+# intercept_lat = model_lat.intercept_
+# coef_lat = model_lat.coef_[0]
+#
+# #  dla Longitude
+# r2_lon = r2_score(y_lon_test, y_lon_pred)
+# rmse_lon = np.sqrt(mean_squared_error(y_lon_test, y_lon_pred))
+# intercept_lon = model_lon.intercept_
+# coef_lon = model_lon.coef_[0]
+#
+# #
+# print("Regresja dla szerokości geograficznej:")
+# print(f"Współczynnik R2: {r2_lat:.4f}")
+# print(f"Średni błąd kwadratowy (RMSE): {rmse_lat:.2f}")
+# print(f"Wyraz wolny: {intercept_lat:.4f}")
+# print(f"Współczynnik coef dla Latitude: {coef_lat:.4f}")
+#
+# #
+# print("\nRegresja dla długości geograficznej:")
+# print(f"Współczynnik R2: {r2_lon:.4f}")
+# print(f"Średni błąd kwadratowy (RMSE): {rmse_lon:.2f}")
+# print(f"Wyraz wolny: {intercept_lon:.4f}")
+# print(f"Współczynnik coef dla Longitude: {coef_lon:.4f}")
+#
+# # KNighbors lat long coef
+# # Funkcja do trenowania i oceny modelu KNN
+
+
+
+# def train_and_evaluate_knn(X, y, n_neighbors=3):
+#     # zbiór treningowy i testowy
+#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+#
+#     #  KNeighborsRegressor
+#     model = KNeighborsRegressor(n_neighbors=n_neighbors)
+#
+#
+#     model.fit(X_train, y_train)
+#
+#     # Pred na zbiorze testowym
+#     y_pred = model.predict(X_test)
+#
+#
+#     r2 = r2_score(y_test, y_pred)
+#     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+#
+#     return r2, rmse
+#
+#
+# # Przygotowanie danych
+# X = dane_zlaczone[['Latitude', 'Longitude']].values
+# y = dane_zlaczone['Wspolczynnik'].values
+#
+# # KNN dla Latitude
+# r2_lat_knn, rmse_lat_knn = train_and_evaluate_knn(X, y, n_neighbors=3)
+#
+# #
+# print("\nKNN dla szerokości geograficznej:")
+# print(f"Współczynnik R2: {r2_lat_knn:.4f}")
+# print(f"Średni błąd kwadratowy (RMSE): {rmse_lat_knn:.2f}")
+#
+# #KNN dla Longitude
+# r2_lon_knn, rmse_lon_knn = train_and_evaluate_knn(X, y, n_neighbors=3)
+#
+
+# print("\nKNN dla długości geograficznej:")
+# print(f"Współczynnik R2: {r2_lon_knn:.4f}")
+# print(f"Średni błąd kwadratowy (RMSE): {rmse_lon_knn:.2f}")
